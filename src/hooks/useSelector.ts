@@ -381,27 +381,29 @@ function useSyncExternalStoreWithSelector<Snapshot, Selection>(
       return nextSelection;
     }; // Assigning this to a constant so that Flow knows it can't change.
 
-
     // Assigning this to a constant so that Flow knows it can't change.
     const maybeGetServerSnapshot = getServerSnapshot === undefined ? null : getServerSnapshot;
 
-    var getSnapshotWithSelector = function () {
+    const getSnapshotWithSelector = function () {
       return memoizedSelector(getSnapshot());
     };
 
-    var getServerSnapshotWithSelector = maybeGetServerSnapshot === null ? undefined : function () {
+    const getServerSnapshotWithSelector = maybeGetServerSnapshot === null ? undefined : function () {
       return memoizedSelector(maybeGetServerSnapshot());
     };
     return [getSnapshotWithSelector, getServerSnapshotWithSelector];
   }, [getSnapshot, getServerSnapshot, selector, isEqual]);
 
-  var value = React.useSyncExternalStore(subscribe, getSelection!, getServerSelection);
+  const value = React.useSyncExternalStore(subscribe, getSelection!, getServerSelection);
+
   React.useEffect(function () {
     if (inst) {
-    inst.hasValue = true;
-    inst.value = value;
+      inst.hasValue = true;
+      inst.value = value;
     }
   }, [value]);
+  
   React.useDebugValue(value);
+  
   return value!;
 }
