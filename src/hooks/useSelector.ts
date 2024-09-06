@@ -8,6 +8,7 @@ import {
   createReduxContextHook,
   useReduxContext as useDefaultReduxContext,
 } from './useReduxContext'
+import { Trace } from '@internal/exports'
 
 /**
  * The frequency of development mode checks.
@@ -165,7 +166,12 @@ export function createSelectorHook(
       getServerState,
       stabilityCheck,
       identityFunctionCheck,
+      trace,
     } = useReduxContext()
+
+    if (trace) {
+      trace.stack = new Error().stack || "";
+    }
 
     const firstRun = React.useRef(true)
 
@@ -239,14 +245,13 @@ export function createSelectorHook(
       [selector, stabilityCheck, devModeChecks.stabilityCheck],
     )
 
-    // React.useSyncExternalStore(subscription.addNestedSub, store.getState);
-
     const selectedState = useSyncExternalStoreWithSelector(
       subscription.addNestedSub,
       store.getState,
       getServerState || store.getState,
       wrappedSelector,
       equalityFn,
+      trace,
     )
 
     React.useDebugValue(selectedState)
@@ -299,7 +304,8 @@ function useSyncExternalStoreWithSelector<Snapshot, Selection>(
   getSnapshot: () => Snapshot,
   getServerSnapshot: undefined | null | (() => Snapshot),
   selector: (snapshot: Snapshot) => Selection,
-  isEqual?: (a: Selection, b: Selection) => boolean
+  isEqual?: (a: Selection, b: Selection) => boolean,
+  trace?: Trace
 ): Selection {
   // Use this to track the rendered snapshot.
   type refType = { hasValue: boolean, value: Selection | null };
@@ -316,6 +322,19 @@ function useSyncExternalStoreWithSelector<Snapshot, Selection>(
     inst = instRef.current;
   }
 
+  const subscribeWrapper = React.useCallback((onStoreChange: () => void): () => void => {
+    trace?.onSubscribe?.();
+    const cleanup = subscribe(() => {
+      trace?.onStoreChange?.();
+      onStoreChange();
+    });
+
+    return () => {
+      trace?.onSubscribeCleanup?.();
+      cleanup();
+    }
+  }, [trace]);
+
   const [getSelection, getServerSelection] = React.useMemo(function () {
     // Track the memoized state using closure variables that are local to this
     // memoized instance of a getSnapshot function. Intentionally not using a
@@ -331,16 +350,20 @@ function useSyncExternalStoreWithSelector<Snapshot, Selection>(
         hasMemo = true;
         memoizedSnapshot = nextSnapshot;
 
+        trace?.onSelectorCallStart?.();
         var _nextSelection = selector(nextSnapshot);
+        trace?.onSelectorCallEnd?.();
 
         if (isEqual !== undefined) {
           // Even if the selector has changed, the currently rendered selection
           // may be equal to the new selection. We should attempt to reuse the
           // current value if possible, to preserve downstream memoizations.
           if (inst?.hasValue) {
-            var currentSelection = inst.value;
+            const currentSelection = inst.value;
+            const eq = isEqual(currentSelection!, _nextSelection);
+            trace?.onIsEqualCall?.(eq);
 
-            if (isEqual(currentSelection!, _nextSelection)) {
+            if (eq) {
               memoizedSelection = currentSelection;
               return currentSelection;
             }
@@ -353,17 +376,23 @@ function useSyncExternalStoreWithSelector<Snapshot, Selection>(
 
 
       // We may be able to reuse the previous invocation's result.
-      var prevSnapshot = memoizedSnapshot;
-      var prevSelection = memoizedSelection;
+      const prevSnapshot = memoizedSnapshot;
+      const prevSelection = memoizedSelection;
 
-      if (Object.is(prevSnapshot, nextSnapshot)) {
+      const isEq = Object.is(prevSnapshot, nextSnapshot);
+
+      trace?.onObjectIsEqualCall?.(isEq);
+
+      if (isEq) {
         // The snapshot is the same as last time. Reuse the previous selection.
         return prevSelection;
       } // The snapshot has changed, so we need to compute a new selection.
 
 
       // The snapshot has changed, so we need to compute a new selection.
+      trace?.onSelectorCallStart?.();
       var nextSelection = selector(nextSnapshot); // If a custom isEqual function is provided, use that to check if the data
+      trace?.onSelectorCallEnd?.();
       // has changed. If it hasn't, return the previous selection. That signals
       // to React that the selections are conceptually equal, and we can bail
       // out of rendering.
@@ -372,8 +401,12 @@ function useSyncExternalStoreWithSelector<Snapshot, Selection>(
       // has changed. If it hasn't, return the previous selection. That signals
       // to React that the selections are conceptually equal, and we can bail
       // out of rendering.
-      if (isEqual !== undefined && isEqual(prevSelection!, nextSelection)) {
-        return prevSelection;
+
+      if (isEqual !== undefined) {
+        const eq = isEqual(prevSelection!, nextSelection);
+        trace?.onIsEqualCall?.(eq);
+        if (eq)
+          return prevSelection;
       }
 
       memoizedSnapshot = nextSnapshot;
@@ -392,9 +425,9 @@ function useSyncExternalStoreWithSelector<Snapshot, Selection>(
       return memoizedSelector(maybeGetServerSnapshot());
     };
     return [getSnapshotWithSelector, getServerSnapshotWithSelector];
-  }, [getSnapshot, getServerSnapshot, selector, isEqual]);
+  }, [getSnapshot, getServerSnapshot, selector, isEqual, trace]);
 
-  const value = React.useSyncExternalStore(subscribe, getSelection!, getServerSelection);
+  const value = React.useSyncExternalStore(subscribeWrapper, getSelection!, getServerSelection);
 
   React.useEffect(function () {
     if (inst) {

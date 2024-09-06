@@ -6,6 +6,7 @@ import { createSubscription } from '../utils/Subscription'
 import { useIsomorphicLayoutEffect } from '../utils/useIsomorphicLayoutEffect'
 import type { ReactReduxContextValue } from './Context'
 import { ReactReduxContext } from './Context'
+import { Trace } from '@internal/utils/trace'
 
 export interface ProviderProps<
   A extends Action<string> = UnknownAction,
@@ -51,6 +52,11 @@ export interface ProviderProps<
    */
   identityFunctionCheck?: DevModeCheckFrequency
 
+  /** Tracing allows capturing interactions such as selector runs and
+   * memoization hits.
+   */
+  trace?: Trace
+
   children: ReactNode
 }
 
@@ -61,6 +67,7 @@ function Provider<A extends Action<string> = UnknownAction, S = unknown>({
   serverState,
   stabilityCheck = 'once',
   identityFunctionCheck = 'once',
+  trace,
 }: ProviderProps<A, S>) {
   const contextValue = React.useMemo(() => {
     const subscription = createSubscription(store)
@@ -70,8 +77,9 @@ function Provider<A extends Action<string> = UnknownAction, S = unknown>({
       getServerState: serverState ? () => serverState : undefined,
       stabilityCheck,
       identityFunctionCheck,
+      trace,
     }
-  }, [store, serverState, stabilityCheck, identityFunctionCheck])
+  }, [store, serverState, stabilityCheck, identityFunctionCheck, trace])
 
   const previousState = React.useMemo(() => store.getState(), [store])
 

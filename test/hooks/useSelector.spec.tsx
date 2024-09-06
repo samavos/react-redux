@@ -16,6 +16,7 @@ import type {
   ProviderProps,
   ReactReduxContextValue,
   Subscription,
+  Trace,
   TypedUseSelectorHook,
 } from 'react-redux'
 import {
@@ -43,6 +44,31 @@ function ProviderMock<A extends Action<any> = AnyAction, S = unknown>({
       identityFunctionCheck={identityFunctionCheck}
     />
   )
+}
+
+function traceMock(): Trace & { log: string[] } {
+  return {
+    stack: "",
+    log: [],
+    onStoreChange() {
+      this.log.push("onStoreChange")
+    },
+    onObjectIsEqualCall(equal) {
+      this.log.push(`onObjectIsEqualCall ${equal}`)
+    },
+    onIsEqualCall(equal) {
+      this.log.push(`onIsEqualCall ${equal}`)
+    },
+    onSubscribe() {
+      this.log.push(`onSubscribe`)
+    },
+    onSubscribeCleanup() {
+      this.log.push(`onSubscribeCleanup`)
+    },
+    onSelectorCallEnd() {
+      this.log.push(`onSelectorCallEnd`)
+    },
+  }
 }
 
 const IS_REACT_18 = React.version.startsWith('18')
@@ -292,7 +318,7 @@ describe('React', () => {
       })
 
       describe('performance optimizations and bail-outs', () => {
-        it('defaults to ref-equality to prevent unnecessary updates', () => {
+        it('defaults to ref-equality to prevent unnecessary updates (with trace)', () => {
           const state = {}
           const store = createStore(() => state)
 
@@ -302,11 +328,20 @@ describe('React', () => {
             return <div />
           }
 
+          const trace = traceMock();
+
           rtl.render(
-            <ProviderMock store={store}>
+            <ProviderMock store={store} trace={trace}>
               <Comp />
             </ProviderMock>,
           )
+
+          expect(trace.log).toStrictEqual([
+            'onSelectorCallEnd',
+            'onObjectIsEqualCall true',
+            'onSubscribe',
+            'onObjectIsEqualCall true'
+          ])
 
           expect(renderedItems.length).toBe(1)
 
