@@ -10,4 +10,6 @@ export interface Trace {
   onSubscribe?: () => void
   onSubscribeCleanup?: () => void
   onStoreChange?: () => void
+
+  onGetSnapshot?: () => void
 }
