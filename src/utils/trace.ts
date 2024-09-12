@@ -1,5 +1,5 @@
 export interface Trace {
-  stack: string | null
+  onSelectorUnmount?: () => void
 
   onSelectorCallStart?: () => void
   onSelectorCallEnd?: () => void
@@ -12,4 +12,8 @@ export interface Trace {
   onStoreChange?: () => void
 
   onGetSnapshot?: () => void
+}
+
+export interface TraceFactory {
+  (stack: string): Trace
 }

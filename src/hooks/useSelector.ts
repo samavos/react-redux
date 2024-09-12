@@ -8,7 +8,8 @@ import {
   createReduxContextHook,
   useReduxContext as useDefaultReduxContext,
 } from './useReduxContext'
-import { Trace } from '@internal/exports'
+import type { Trace } from '@internal/exports'
+import { useEffect } from 'react'
 
 /**
  * The frequency of development mode checks.
@@ -166,12 +167,18 @@ export function createSelectorHook(
       getServerState,
       stabilityCheck,
       identityFunctionCheck,
-      trace,
+      traceFactory,
     } = useReduxContext()
 
-    if (trace) {
-      trace.stack = new Error().stack || "";
-    }
+    const [trace] = React.useState(traceFactory && traceFactory(new Error().stack || ""));
+
+    useEffect(() => {
+      return () => {
+        if (trace) {
+          trace.onSelectorUnmount?.();
+        }
+      }
+    }, [trace]);
 
     const firstRun = React.useRef(true)
 
@@ -310,7 +317,7 @@ function useSyncExternalStoreWithSelector<Snapshot, Selection>(
   // Use this to track the rendered snapshot.
   type refType = { hasValue: boolean, value: Selection | null };
   const instRef = React.useRef<refType|null>(null);
-  var inst: refType | null = null;
+  let inst: refType | null = null;
 
   if (instRef.current === null) {
     inst = {
@@ -340,18 +347,18 @@ function useSyncExternalStoreWithSelector<Snapshot, Selection>(
     // memoized instance of a getSnapshot function. Intentionally not using a
     // useRef hook, because that state would be shared across all concurrent
     // copies of the hook/component.
-    var hasMemo = false;
-    var memoizedSnapshot: Snapshot | null = null;
-    var memoizedSelection: Selection | null = null;
+    let hasMemo = false;
+    let memoizedSnapshot: Snapshot | null = null;
+    let memoizedSelection: Selection | null = null;
 
-    var memoizedSelector = function (nextSnapshot: Snapshot) {
+    const memoizedSelector = function (nextSnapshot: Snapshot) {
       if (!hasMemo) {
         // The first time the hook is called, there is no memoized result.
         hasMemo = true;
         memoizedSnapshot = nextSnapshot;
 
         trace?.onSelectorCallStart?.();
-        var _nextSelection = selector(nextSnapshot);
+        const _nextSelection = selector(nextSnapshot);
         trace?.onSelectorCallEnd?.();
 
         if (isEqual !== undefined) {
@@ -391,7 +398,7 @@ function useSyncExternalStoreWithSelector<Snapshot, Selection>(
 
       // The snapshot has changed, so we need to compute a new selection.
       trace?.onSelectorCallStart?.();
-      var nextSelection = selector(nextSnapshot); // If a custom isEqual function is provided, use that to check if the data
+      const nextSelection = selector(nextSnapshot); // If a custom isEqual function is provided, use that to check if the data
       trace?.onSelectorCallEnd?.();
       // has changed. If it hasn't, return the previous selection. That signals
       // to React that the selections are conceptually equal, and we can bail

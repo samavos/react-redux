@@ -46,7 +46,7 @@ function ProviderMock<A extends Action<any> = AnyAction, S = unknown>({
   )
 }
 
-function traceMock(): Trace & { log: string[] } {
+function traceMock(): Trace & { log: string[], stack: string } {
   return {
     stack: "",
     log: [],
@@ -331,15 +331,21 @@ describe('React', () => {
             return <div />
           }
 
-          const trace = traceMock();
+          let trace: ReturnType<typeof traceMock>;
+          const traceFactory = (stack: string) => { 
+            trace = traceMock(); 
+            trace.stack = stack;
+            return trace; 
+          }
 
           rtl.render(
-            <ProviderMock store={store} trace={trace}>
+            <ProviderMock store={store} traceFactory={traceFactory}>
               <Comp />
             </ProviderMock>,
           )
 
-          expect(trace.log).toStrictEqual([
+          expect(trace!.log).toStrictEqual([
+            'onSelectorCallStart',
             'onSelectorCallEnd',
             'onObjectIsEqualCall true',
             'onSubscribe',
