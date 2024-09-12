@@ -4,12 +4,11 @@ import { React } from '../utils/react'
 import type { ReactReduxContextValue } from '../components/Context'
 import { ReactReduxContext } from '../components/Context'
 import type { EqualityFn, NoInfer } from '../types'
-import type { uSESWS } from '../utils/useSyncExternalStore'
-import { notInitialized } from '../utils/useSyncExternalStore'
 import {
   createReduxContextHook,
   useReduxContext as useDefaultReduxContext,
 } from './useReduxContext'
+import { Trace } from '@internal/exports'
 
 /**
  * The frequency of development mode checks.
@@ -118,11 +117,6 @@ export interface UseSelector<StateType = unknown> {
   >() => UseSelector<OverrideStateType>
 }
 
-let useSyncExternalStoreWithSelector = notInitialized as uSESWS
-export const initializeUseSelector = (fn: uSESWS) => {
-  useSyncExternalStoreWithSelector = fn
-}
-
 const refEquality: EqualityFn<any> = (a, b) => a === b
 
 /**
@@ -172,7 +166,12 @@ export function createSelectorHook(
       getServerState,
       stabilityCheck,
       identityFunctionCheck,
+      trace,
     } = useReduxContext()
+
+    if (trace) {
+      trace.stack = new Error().stack || "";
+    }
 
     const firstRun = React.useRef(true)
 
@@ -252,6 +251,7 @@ export function createSelectorHook(
       getServerState || store.getState,
       wrappedSelector,
       equalityFn,
+      trace,
     )
 
     React.useDebugValue(selectedState)
@@ -290,3 +290,154 @@ export function createSelectorHook(
  * }
  */
 export const useSelector = /*#__PURE__*/ createSelectorHook()
+
+
+
+
+export type uSES = typeof React.useSyncExternalStore
+export type uSESWS = typeof useSyncExternalStoreWithSelector
+
+
+// Copied from use-sync-external-store
+function useSyncExternalStoreWithSelector<Snapshot, Selection>(
+  subscribe: (onStoreChange: () => void) => () => void,
+  getSnapshot: () => Snapshot,
+  getServerSnapshot: undefined | null | (() => Snapshot),
+  selector: (snapshot: Snapshot) => Selection,
+  isEqual?: (a: Selection, b: Selection) => boolean,
+  trace?: Trace
+): Selection {
+  // Use this to track the rendered snapshot.
+  type refType = { hasValue: boolean, value: Selection | null };
+  const instRef = React.useRef<refType|null>(null);
+  var inst: refType | null = null;
+
+  if (instRef.current === null) {
+    inst = {
+      hasValue: false,
+      value: null
+    };
+    instRef.current = inst;
+  } else {
+    inst = instRef.current;
+  }
+
+  const subscribeWrapper = React.useCallback((onStoreChange: () => void): () => void => {
+    trace?.onSubscribe?.();
+    const cleanup = subscribe(() => {
+      trace?.onStoreChange?.();
+      onStoreChange();
+    });
+
+    return () => {
+      trace?.onSubscribeCleanup?.();
+      cleanup();
+    }
+  }, [trace]);
+
+  const [getSelection, getServerSelection] = React.useMemo(function () {
+    // Track the memoized state using closure variables that are local to this
+    // memoized instance of a getSnapshot function. Intentionally not using a
+    // useRef hook, because that state would be shared across all concurrent
+    // copies of the hook/component.
+    var hasMemo = false;
+    var memoizedSnapshot: Snapshot | null = null;
+    var memoizedSelection: Selection | null = null;
+
+    var memoizedSelector = function (nextSnapshot: Snapshot) {
+      if (!hasMemo) {
+        // The first time the hook is called, there is no memoized result.
+        hasMemo = true;
+        memoizedSnapshot = nextSnapshot;
+
+        trace?.onSelectorCallStart?.();
+        var _nextSelection = selector(nextSnapshot);
+        trace?.onSelectorCallEnd?.();
+
+        if (isEqual !== undefined) {
+          // Even if the selector has changed, the currently rendered selection
+          // may be equal to the new selection. We should attempt to reuse the
+          // current value if possible, to preserve downstream memoizations.
+          if (inst?.hasValue) {
+            const currentSelection = inst.value;
+            const eq = isEqual(currentSelection!, _nextSelection);
+            trace?.onIsEqualCall?.(eq);
+
+            if (eq) {
+              memoizedSelection = currentSelection;
+              return currentSelection;
+            }
+          }
+        }
+
+        memoizedSelection = _nextSelection;
+        return _nextSelection;
+      } // We may be able to reuse the previous invocation's result.
+
+
+      // We may be able to reuse the previous invocation's result.
+      const prevSnapshot = memoizedSnapshot;
+      const prevSelection = memoizedSelection;
+
+      const isEq = Object.is(prevSnapshot, nextSnapshot);
+
+      trace?.onObjectIsEqualCall?.(isEq);
+
+      if (isEq) {
+        // The snapshot is the same as last time. Reuse the previous selection.
+        return prevSelection;
+      } // The snapshot has changed, so we need to compute a new selection.
+
+
+      // The snapshot has changed, so we need to compute a new selection.
+      trace?.onSelectorCallStart?.();
+      var nextSelection = selector(nextSnapshot); // If a custom isEqual function is provided, use that to check if the data
+      trace?.onSelectorCallEnd?.();
+      // has changed. If it hasn't, return the previous selection. That signals
+      // to React that the selections are conceptually equal, and we can bail
+      // out of rendering.
+
+      // If a custom isEqual function is provided, use that to check if the data
+      // has changed. If it hasn't, return the previous selection. That signals
+      // to React that the selections are conceptually equal, and we can bail
+      // out of rendering.
+
+      if (isEqual !== undefined) {
+        const eq = isEqual(prevSelection!, nextSelection);
+        trace?.onIsEqualCall?.(eq);
+        if (eq)
+          return prevSelection;
+      }
+
+      memoizedSnapshot = nextSnapshot;
+      memoizedSelection = nextSelection;
+      return nextSelection;
+    }; // Assigning this to a constant so that Flow knows it can't change.
+
+    // Assigning this to a constant so that Flow knows it can't change.
+    const maybeGetServerSnapshot = getServerSnapshot === undefined ? null : getServerSnapshot;
+
+    const getSnapshotWithSelector = function () {
+      trace?.onGetSnapshot?.();
+      return memoizedSelector(getSnapshot());
+    };
+
+    const getServerSnapshotWithSelector = maybeGetServerSnapshot === null ? undefined : function () {
+      return memoizedSelector(maybeGetServerSnapshot());
+    };
+    return [getSnapshotWithSelector, getServerSnapshotWithSelector];
+  }, [getSnapshot, getServerSnapshot, selector, isEqual, trace]);
+
+  const value = React.useSyncExternalStore(subscribeWrapper, getSelection!, getServerSelection);
+
+  React.useEffect(function () {
+    if (inst) {
+      inst.hasValue = true;
+      inst.value = value;
+    }
+  }, [value]);
+  
+  React.useDebugValue(value);
+  
+  return value!;
+}

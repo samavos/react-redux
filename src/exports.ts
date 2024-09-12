@@ -40,6 +40,8 @@ export type { UseStore } from './hooks/useStore'
 
 export type { Subscription } from './utils/Subscription'
 
+export type { Trace } from "./utils/trace"
+
 export * from './types'
 
 /**
