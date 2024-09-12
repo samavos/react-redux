@@ -51,7 +51,7 @@ function traceMock(): Trace & { log: string[] } {
     stack: "",
     log: [],
     onStoreChange() {
-      this.log.push("onStoreChange")
+      this.log.push(`onStoreChange`)
     },
     onObjectIsEqualCall(equal) {
       this.log.push(`onObjectIsEqualCall ${equal}`)
@@ -64,6 +64,9 @@ function traceMock(): Trace & { log: string[] } {
     },
     onSubscribeCleanup() {
       this.log.push(`onSubscribeCleanup`)
+    },
+    onSelectorCallStart() {
+      this.log.push(`onSelectorCallStart`)
     },
     onSelectorCallEnd() {
       this.log.push(`onSelectorCallEnd`)

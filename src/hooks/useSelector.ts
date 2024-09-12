@@ -418,6 +418,7 @@ function useSyncExternalStoreWithSelector<Snapshot, Selection>(
     const maybeGetServerSnapshot = getServerSnapshot === undefined ? null : getServerSnapshot;
 
     const getSnapshotWithSelector = function () {
+      trace?.onGetSnapshot?.();
       return memoizedSelector(getSnapshot());
     };
 
