@@ -170,15 +170,18 @@ export function createSelectorHook(
       traceFactory,
     } = useReduxContext()
 
-    const [trace] = React.useState(traceFactory && traceFactory(new Error().stack || ""));
+    const trace = React.useRef<Trace>();
+    
+    if (!trace.current && traceFactory) {
+        const stack = new Error().stack || "";
+        trace.current = traceFactory(stack);
+    }
 
     useEffect(() => {
       return () => {
-        if (trace) {
-          trace.onSelectorUnmount?.();
-        }
+        trace.current?.onSelectorUnmount?.();
       }
-    }, [trace]);
+    }, []);
 
     const firstRun = React.useRef(true)
 
@@ -258,7 +261,7 @@ export function createSelectorHook(
       getServerState || store.getState,
       wrappedSelector,
       equalityFn,
-      trace,
+      trace.current,
     )
 
     React.useDebugValue(selectedState)
