@@ -46,9 +46,9 @@ function ProviderMock<A extends Action<any> = AnyAction, S = unknown>({
   )
 }
 
-function traceMock(): Trace & { log: string[], stack: string } {
+function traceMock(): Trace & { log: string[], name?: string } {
   return {
-    stack: "",
+    name: "",
     log: [],
     onStoreChange() {
       this.log.push(`onStoreChange`)
@@ -332,9 +332,9 @@ describe('React', () => {
           }
 
           let trace: ReturnType<typeof traceMock>;
-          const traceFactory = (stack: string) => { 
+          const traceFactory = (name?: string) => { 
             trace = traceMock(); 
-            trace.stack = stack;
+            trace.name = name;
             return trace; 
           }
 

@@ -93,6 +93,7 @@ export interface UseSelector<StateType = unknown> {
   <TState extends StateType = StateType, Selected = unknown>(
     selector: (state: TState) => Selected,
     equalityFnOrOptions?: EqualityFn<Selected> | UseSelectorOptions<Selected>,
+    name?: string,
   ): Selected
 
   /**
@@ -142,6 +143,7 @@ export function createSelectorHook(
     equalityFnOrOptions:
       | EqualityFn<NoInfer<Selected>>
       | UseSelectorOptions<NoInfer<Selected>> = {},
+    name?: string,
   ): Selected => {
     const { equalityFn = refEquality, devModeChecks = {} } =
       typeof equalityFnOrOptions === 'function'
@@ -170,16 +172,21 @@ export function createSelectorHook(
       traceFactory,
     } = useReduxContext()
 
-    const trace = React.useRef<{ trace: Trace, selector: (state: TState) => Selected }>();
+    const trace = React.useRef<{ 
+      trace: Trace, 
+      selector: (state: TState) => Selected,
+      name?: string,
+    }>();
 
-    if (trace.current && trace.current.selector !== selector) {
+    if (trace.current && 
+         (trace.current.selector !== selector || 
+          trace.current.name !== name)) {
       trace.current?.trace.onSelectorUnmount?.();
       trace.current = undefined;
     }
 
     if (!trace.current && traceFactory) {
-      const stack = new Error().stack || "";
-      trace.current = { trace: traceFactory(stack), selector };
+      trace.current = { trace: traceFactory(name), selector, name };
     }
 
     useEffect(() => {

@@ -15,5 +15,5 @@ export interface Trace {
 }
 
 export interface TraceFactory {
-  (stack: string): Trace
+  (name?: string): Trace
 }
